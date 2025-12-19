@@ -34,17 +34,21 @@ jobs:
           docker push 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:v2
 
   deploy:
-    runs-on: ubuntu-latest
-    needs: build-push
+  runs-on: ubuntu-latest
+  needs: build-push
 
-    steps:
-      - name: Deploy to server
-        run: |
-          echo "${{ secrets.SSH_KEY }}" > mykey.pem
-          chmod 600 mykey.pem
+  steps:
+    - name: Deploy to server
+      run: |
+        echo "${{ secrets.SSH_KEY }}" > mykey.pem
+        chmod 600 mykey.pem
 
-          ssh -o StrictHostKeyChecking=no -i mykey.pem ubuntu@98.81.156.231 \
-          "docker pull 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:v2"
+        ssh -o StrictHostKeyChecking=no -i mykey.pem ubuntu@98.81.156.231 << 'EOF'
+          aws ecr get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin 915233243854.dkr.ecr.us-east-1.amazonaws.com
 
-          ssh -o StrictHostKeyChecking=no -i mykey.pem ubuntu@98.81.156.231 \
-          "docker run -d -p 80:80 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:v2"
+          docker pull 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:v2
+          docker stop mediplus || true
+          docker rm mediplus || true
+          docker run -d --name mediplus -p 80:80 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:v2
+        EOF
