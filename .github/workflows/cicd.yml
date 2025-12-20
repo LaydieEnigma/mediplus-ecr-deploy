@@ -12,6 +12,11 @@ jobs:
   build-push:
     runs-on: ubuntu-latest
 
+    env:
+      IMAGE_TAG: ${{ github.run_number }}
+      ECR_REGISTRY: 915233243854.dkr.ecr.us-east-1.amazonaws.com
+      IMAGE_NAME: mediplus
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,20 +31,22 @@ jobs:
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region us-east-1 | \
-          docker login --username AWS --password-stdin 915233243854.dkr.ecr.us-east-1.amazonaws.com
+          docker login --username AWS --password-stdin $ECR_REGISTRY
 
-      - name: Build and push image
+      - name: Build and push Docker image
         run: |
-          docker build -t mediplus:${{ github.run_number }} .
-          docker tag mediplus:${{ github.run_number }} 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:${{ github.run_number }}
-          docker push 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:${{ github.run_numbr}}
-          
-
-        
+          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+          docker tag $IMAGE_NAME:$IMAGE_TAG $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
 
   deploy:
     runs-on: ubuntu-latest
     needs: build-push
+
+    env:
+      IMAGE_TAG: ${{ github.run_number }}
+      ECR_REGISTRY: 915233243854.dkr.ecr.us-east-1.amazonaws.com
+      IMAGE_NAME: mediplus
 
     steps:
       - name: Deploy to EC2
@@ -47,15 +54,13 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > mykey.pem
           chmod 600 mykey.pem
 
-          ssh -o StrictHostKeyChecking=no -i mykey.pem ubuntu@98.81.156.231 << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i mykey.pem ubuntu@98.81.156.231 << EOF
             aws ecr get-login-password --region us-east-1 | \
-            docker login --username AWS --password-stdin 915233243854.dkr.ecr.us-east-1.amazonaws.com
+            docker login --username AWS --password-stdin $ECR_REGISTRY
 
-          docker push 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:
-            docker pull 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:${{ github.run_number }}
-            docker stop mediplus || true
-            docker rm mediplus || true
-            docker run -d --name mediplus -p 80:80 \
-          docker push 915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:
-            915233243854.dkr.ecr.us-east-1.amazonaws.com/mediplus:${{ github.run_number }}
+            docker pull $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+            docker stop $IMAGE_NAME || true
+            docker rm $IMAGE_NAME || true
+            docker run -d --name $IMAGE_NAME -p 80:80 \
+            $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
           EOF
